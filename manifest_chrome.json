@@ -1,0 +1,26 @@
+{
+    "manifest_version": 3,
+    "background": {
+        "service_worker": "background.js"
+    },
+    "name": "ChatGPT Auto Voice Reader",
+    "version": "1.0",
+    "description": "Automatically click the read outload button on ChatGPT.",
+    "permissions": [],
+    "content_scripts": [
+        {
+            "matches": [
+                "https://chatgpt.com/*"
+            ],
+            "js": [
+                "content.js"
+            ]
+        }
+    ],
+    "action": {
+        "default_title": "Auto read ChatGPT"
+    },
+    "icons": {
+        "48": "icons/icon48.png"
+    }
+}
