@@ -1,5 +1,5 @@
 // content.js
-// "Jarvis" Pro: Premium UI, Visualizer, & Direct API Audio
+// V-READER: Neo-Brutalist Audio Reader for ChatGPT
 
 (function () {
   'use strict';
@@ -9,28 +9,36 @@
     autoRead: true,
     voice: 'vale',
     speed: 1.0,
-    isExpanded: true, // Start expanded to show off controls
+    isExpanded: true,
     isPlaying: false,
-    audioCtx: null,
-    analyser: null,
-    dataArray: null,
-    source: null,
-    animationId: null,
+    theme: 'light',
     currentAudio: null,
+    lastConvId: null,
+    lastMsgId: null,
     failedIds: new Set(),
     processingId: null
   };
 
   const API_ENDPOINT = "https://chatgpt.com/backend-api/synthesize";
   const VOICES = ['ember', 'spruce', 'breeze', 'cove', 'arbor', 'juniper', 'maple', 'sol', 'vale'];
+  const SPEEDS = [0.25, 0.5, 0.75, 1.0, 1.25, 1.5, 1.75, 2.0];
 
   // --- HTML & CSS ---
+  /* --- HTML & CSS --- */
   const STYLES = `
         /* Font logic */
-        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;600&display=swap');
+        @import url('https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;700&display=swap');
 
         #arc-widget {
-            font-family: 'Inter', -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+            font-family: 'JetBrains Mono', monospace;
+            /* Theme Variables (Light Default) */
+            --arc-bg: #ffffff;
+            --arc-txt: #000000;
+            --arc-border: #000000;
+            --arc-shadow: #000000;
+            --arc-accent: #00ff9d; /* Green */
+            --arc-accent-txt: #000000;
+
             position: fixed !important;
             bottom: 30px !important;
             right: 30px !important;
@@ -41,42 +49,49 @@
             pointer-events: none;
         }
 
+        /* Dark Mode Overrides */
+        #arc-widget.dark-mode {
+            --arc-bg: #000000;
+            --arc-txt: #ffffff;
+            --arc-border: #ffffff;
+            --arc-shadow: rgba(255, 255, 255, 0.8);
+            /* Keep accent as green or maybe adjust? Green pops on black too. */
+        }
+
         /* --- Floating Action Button --- */
         #arc-fab {
-            width: 60px;
-            height: 60px;
-            border-radius: 50%;
-            background: #10a37f; /* Solid fallback */
-            background: rgba(16, 163, 127, 0.9);
-            color: white;
-            border: 2px solid white; /* Distinct border */
+            width: 50px;
+            height: 50px;
+            background: var(--arc-bg);
+            color: var(--arc-txt);
+            border: 3px solid var(--arc-border);
+            box-shadow: 4px 4px 0px var(--arc-shadow);
             cursor: pointer;
             display: flex;
             align-items: center;
             justify-content: center;
             pointer-events: auto;
-            box-shadow: 0 4px 20px rgba(0,0,0,0.5);
+            transition: all 0.1s;
         }
+        #arc-fab:active { transform: translate(2px, 2px); box-shadow: 2px 2px 0px var(--arc-shadow); }
 
         /* --- Main Panel (Expanded) --- */
         #arc-panel {
             pointer-events: auto;
-            width: 320px;
-            background: #202123; /* Solid fallback */
-            background: rgba(32, 33, 35, 0.95);
-            border: 1px solid rgba(255, 255, 255, 0.2);
-            border-radius: 16px;
+            width: 300px;
+            background: var(--arc-bg);
+            border: 3px solid var(--arc-border);
+            box-shadow: 8px 8px 0px var(--arc-shadow);
             padding: 16px;
             margin-bottom: 16px;
-            color: white;
-            opacity: 0;
-            transform: translateY(10px);
-            transition: opacity 0.3s, transform 0.3s;
+            color: var(--arc-txt);
             display: flex;
             flex-direction: column;
-            gap: 12px;
+            gap: 16px;
+            opacity: 0;
+            transform: translateY(10px);
             visibility: hidden;
-            box-shadow: 0 10px 40px rgba(0,0,0,0.6);
+            transition: opacity 0.2s, transform 0.2s;
         }
 
         #arc-panel.visible {
@@ -92,90 +107,93 @@
             justify-content: space-between;
             align-items: center;
             cursor: grab;
-            padding-bottom: 12px;
-            border-bottom: 1px solid rgba(255, 255, 255, 0.08);
             user-select: none;
+            border-bottom: 3px solid var(--arc-border);
+            padding-bottom: 8px;
+            margin-bottom: 8px;
         }
-        #arc-header h3 { margin: 0; font-size: 14px; font-weight: 600; letter-spacing: 0.5px; color: #fff; display:flex; align-items:center; gap:8px;}
-        #arc-minimize { background: none; border: none; color: #aaa; cursor: pointer; padding: 4px; border-radius: 50%; transition: 0.2s; }
-        #arc-minimize:hover { background: rgba(255,255,255,0.1); color: white; }
-
-        /* Visualizer */
-        #arc-visualizer-container {
-            height: 64px;
-            background: rgba(0,0,0,0.3);
-            border-radius: 12px;
-            position: relative;
-            overflow: hidden;
-            border: 1px solid rgba(255,255,255,0.05);
-        }
-        canvas#arc-canvas { width: 100%; height: 100%; }
+        #arc-header h3 { margin: 0; font-size: 16px; font-weight: 700; text-transform: uppercase; letter-spacing: -1px;}
+        
+        .arc-icon-btn { background: none; border: none; color: var(--arc-txt); cursor: pointer; padding: 4px; display:flex; align-items:center; justify-content:center;}
+        .arc-icon-btn:hover { transform: scale(1.1); }
+        .arc-icon-btn svg { width: 18px; height: 18px; }
 
         /* Controls */
-        #arc-controls-row { display: flex; justify-content: space-between; align-items: center; gap: 8px; }
+        #arc-controls-wrapper { display: flex; flex-direction: column; gap: 12px; width: 100%; }
+        
+        #arc-progress-container { display: flex; align-items: center; gap: 8px; font-size: 12px; font-weight: 700; }
+        #arc-time-current, #arc-time-total { min-width: 36px; text-align: center; }
+        
+        /* Brutalist Slider */
+        .arc-slider {
+            -webkit-appearance: none;
+            width: 100%;
+            height: 12px;
+            background: var(--arc-bg);
+            border: 2px solid var(--arc-border);
+            outline: none;
+            cursor: pointer;
+        }
+        .arc-slider::-webkit-slider-thumb {
+            -webkit-appearance: none;
+            appearance: none;
+            width: 12px;
+            height: 12px;
+            background: var(--arc-txt);
+            cursor: pointer;
+            box-shadow: none;
+            border: none;
+        }
+
+        #arc-main-controls { display: flex; align-items: center; gap: 12px; }
         
         .arc-btn {
-            background: rgba(255,255,255,0.08);
-            border: none;
-            border-radius: 12px;
-            color: #ddd;
-            height: 40px;
+            background: var(--arc-bg);
+            border: 3px solid var(--arc-border);
+            color: var(--arc-txt);
+            height: 48px;
             width: 48px;
             cursor: pointer;
-            transition: all 0.2s;
             display: flex;
             align-items: center;
             justify-content: center;
+            box-shadow: 3px 3px 0px var(--arc-shadow);
+            transition: all 0.1s;
         }
-        .arc-btn:hover { background: rgba(255,255,255,0.15); color: white; transform: translateY(-1px); }
-        .arc-btn:active { transform: translateY(0); }
+        .arc-btn:active { transform: translate(2px, 2px); box-shadow: 1px 1px 0px var(--arc-shadow); }
         
         #arc-play-pause {
+            background: var(--arc-accent);
+            color: var(--arc-accent-txt);
             width: 100%;
-            background: #10a37f;
-            color: white;
-            box-shadow: 0 4px 12px rgba(16, 163, 127, 0.3);
+            flex: 1;
         }
-        #arc-play-pause:hover { background: #0d8a6a; }
 
-        /* Settings */
-        #arc-settings { display: grid; grid-template-columns: 2fr 1fr; gap: 12px; align-items: center;}
-        
-        #arc-voice-select {
+        /* Selects */
+        .arc-select {
             width: 100%;
-            background: rgba(0,0,0,0.3);
-            border: 1px solid rgba(255,255,255,0.1);
-            color: #eee;
-            border-radius: 8px;
-            padding: 8px 12px;
-            font-size: 13px;
+            background: var(--arc-bg);
+            border: 3px solid var(--arc-border);
+            color: var(--arc-txt);
+            padding: 8px;
+            font-family: 'JetBrains Mono', monospace;
+            font-size: 12px;
+            font-weight: 700;
             outline: none;
             cursor: pointer;
             appearance: none;
+            box-shadow: 3px 3px 0px var(--arc-shadow);
         }
-        #arc-voice-select:hover { border-color: rgba(255,255,255,0.3); }
-
-        #arc-speed-display {
-            font-family: monospace;
-            font-size: 12px;
-            color: #aaa;
-            text-align: right;
-            padding-right: 4px;
-        }
+        .arc-select:active { transform: translate(2px, 2px); box-shadow: 1px 1px 0px var(--arc-shadow); }
         
-        @keyframes pulse-ring {
-            0% { box-shadow: 0 0 0 0 rgba(16, 163, 127, 0.7); }
-            70% { box-shadow: 0 0 0 10px rgba(16, 163, 127, 0); }
-            100% { box-shadow: 0 0 0 0 rgba(16, 163, 127, 0); }
-        }
+        #arc-settings { display: grid; grid-template-columns: 2fr 1fr; gap: 12px; }
+
     `;
 
-  // New "Atom/Core" Icon for Jarvis
-  const JARVIS_ICON = `
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
-            <circle cx="12" cy="12" r="3"></circle>
-            <path d="M19.4 15a1.1 1.1 0 0 0 .3 1.7A10.3 10.3 0 0 1 12 21a10.3 10.3 0 0 1-7.7-4.3 1.1 1.1 0 0 0 .3-1.7"></path>
-            <path d="M4.6 9a1.1 1.1 0 0 0-.3-1.7A10.3 10.3 0 0 1 12 3a10.3 10.3 0 0 1 7.7 4.3 1.1 1.1 0 0 0-.3 1.7"></path>
+  const ICON_READER = `
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="square" stroke-linejoin="miter">
+            <path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"></path>
+            <path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"></path>
         </svg>
     `;
 
@@ -183,41 +201,43 @@
         <!-- Main Expanded Panel -->
         <div id="arc-panel" class="visible">
             <div id="arc-header">
-                <h3>${JARVIS_ICON.replace('width="24"', 'width="18"').replace('height="24"', 'height="18"')} &nbsp; JARVIS</h3>
-                <button id="arc-minimize" title="Minimize">
-                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
-                </button>
+                <h3>V-READER</h3>
+                <div style="display:flex; gap:8px; align-items:center;">
+                    <button id="arc-theme-toggle" class="arc-icon-btn" title="Toggle Theme">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                           <path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"></path>
+                        </svg>
+                    </button>
+                    <button id="arc-minimize" class="arc-icon-btn" title="Minimize">_</button>
+                </div>
             </div>
             
-            <div id="arc-visualizer-container">
-                <canvas id="arc-canvas"></canvas>
-            </div>
-
-            <div id="arc-controls-row">
-                <button id="arc-prev-speed" class="arc-btn" title="Slower (-0.25x)">
-                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M11 5L6 9H2V15H6L11 19V5Z"></path><path d="M15.54 8.46L19.07 12L15.54 15.54"></path></svg>
-                </button>
-                <div style="flex:1">
-                    <button id="arc-play-pause" class="arc-btn" title="Play/Pause">
-                        <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="5 3 19 12 5 21 5 3"></polygon></svg>
-                    </button>
+            <div id="arc-controls-wrapper">
+                <!-- Progress Bar -->
+                <div id="arc-progress-container">
+                    <span id="arc-time-current">0:00</span>
+                    <input type="range" id="arc-progress" class="arc-slider" value="0" min="0" max="100" step="0.1">
+                    <span id="arc-time-total">0:00</span>
                 </div>
-                <button id="arc-next-speed" class="arc-btn" title="Faster (+0.25x)">
-                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M11 5L6 9H2V15H6L11 19V5Z"></path><path d="M19.07 15.54L15.54 12L19.07 8.46"></path></svg>
-                </button>
+
+                <div id="arc-main-controls">
+                     <button id="arc-play-pause" class="arc-btn" title="Play/Pause">PLAY</button>
+                </div>
             </div>
 
             <div id="arc-settings">
-                <select id="arc-voice-select" title="Voice Selection">
-                     ${VOICES.map(v => `<option value="${v}">${v.charAt(0).toUpperCase() + v.slice(1)}</option>`).join('')}
+                <select id="arc-voice-select" class="arc-select" title="Voice">
+                     ${VOICES.map(v => `<option value="${v}">VOICE: ${v.toUpperCase()}</option>`).join('')}
                 </select>
-                <span id="arc-speed-display">1.00x</span>
+                <select id="arc-speed-select" class="arc-select" title="Speed">
+                    ${SPEEDS.map(s => `<option value="${s}" ${s === 1.0 ? 'selected' : ''}>${s}x</option>`).join('')}
+                </select>
             </div>
         </div>
 
         <!-- Floating Button -->
-        <button id="arc-fab" title="Open Jarvis" style="display:none;">
-            ${JARVIS_ICON}
+        <button id="arc-fab" title="Open Reader" style="display:none;">
+            ${ICON_READER.replace('width="24"', 'width="20"').replace('height="24"', 'height="20"')}
         </button>
     `;
 
@@ -242,10 +262,11 @@
     const fab = wrapper.querySelector('#arc-fab');
     const panel = wrapper.querySelector('#arc-panel');
     const minimize = wrapper.querySelector('#arc-minimize');
+    const themeToggle = wrapper.querySelector('#arc-theme-toggle');
     const playPause = wrapper.querySelector('#arc-play-pause');
     const voiceSel = wrapper.querySelector('#arc-voice-select');
-    const speedPrev = wrapper.querySelector('#arc-prev-speed');
-    const speedNext = wrapper.querySelector('#arc-next-speed');
+    const speedSel = wrapper.querySelector('#arc-speed-select');
+    const progressSlider = wrapper.querySelector('#arc-progress');
 
     const togglePanel = () => {
       STATE.isExpanded = !STATE.isExpanded;
@@ -258,12 +279,21 @@
       }
     };
 
-    fab.addEventListener('click', () => {
-      if (STATE.audioCtx && STATE.audioCtx.state === 'suspended') STATE.audioCtx.resume();
-      togglePanel();
-    });
-
+    fab.addEventListener('click', togglePanel);
     minimize.addEventListener('click', togglePanel);
+
+    themeToggle.addEventListener('click', () => {
+      STATE.theme = STATE.theme === 'light' ? 'dark' : 'light';
+      const widget = document.getElementById('arc-widget');
+
+      if (STATE.theme === 'dark') {
+        widget.classList.add('dark-mode');
+        themeToggle.innerHTML = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="5"></circle><line x1="12" y1="1" x2="12" y2="3"></line><line x1="12" y1="21" x2="12" y2="23"></line><line x1="4.22" y1="4.22" x2="5.64" y2="5.64"></line><line x1="18.36" y1="18.36" x2="19.78" y2="19.78"></line><line x1="1" y1="12" x2="3" y2="12"></line><line x1="21" y1="12" x2="23" y2="12"></line><line x1="4.22" y1="19.78" x2="5.64" y2="18.36"></line><line x1="18.36" y1="5.64" x2="19.78" y2="4.22"></line></svg>`;
+      } else {
+        widget.classList.remove('dark-mode');
+        themeToggle.innerHTML = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"></path></svg>`;
+      }
+    });
 
     playPause.addEventListener('click', () => {
       if (STATE.currentAudio) {
@@ -276,34 +306,54 @@
         }
         updatePlayButton(STATE.isPlaying);
       } else {
-        // If no audio, maybe toggle auto-read?
         STATE.autoRead = !STATE.autoRead;
-        // Visual feedback?
       }
+    });
+
+    speedSel.addEventListener('change', (e) => {
+      const val = parseFloat(e.target.value);
+      STATE.speed = val;
+      if (STATE.currentAudio) STATE.currentAudio.playbackRate = val;
     });
 
     voiceSel.addEventListener('change', (e) => {
       STATE.voice = e.target.value;
+      if (STATE.currentAudio) {
+        const wasPlaying = !STATE.currentAudio.paused;
+        STATE.currentAudio.pause();
+        STATE.currentAudio = null;
+        if (wasPlaying && STATE.lastMsgId && STATE.lastConvId) {
+          playAudio(STATE.lastConvId, STATE.lastMsgId);
+        }
+      }
     });
 
-    speedPrev.addEventListener('click', () => updateSpeed(-0.25));
-    speedNext.addEventListener('click', () => updateSpeed(0.25));
+    progressSlider.addEventListener('input', (e) => {
+      if (STATE.currentAudio) {
+        const pct = parseFloat(e.target.value);
+        const time = (pct / 100) * STATE.currentAudio.duration;
+        STATE.currentAudio.currentTime = time;
+      }
+    });
   }
 
-  function updateSpeed(delta) {
-    STATE.speed = Math.max(0.25, Math.min(3.0, STATE.speed + delta));
-    document.getElementById('arc-speed-display').textContent = STATE.speed.toFixed(2) + 'x';
-    if (STATE.currentAudio) STATE.currentAudio.playbackRate = STATE.speed;
+  function formatTime(seconds) {
+    if (!seconds) return "0:00";
+    const m = Math.floor(seconds / 60);
+    const s = Math.floor(seconds % 60);
+    return `${m}:${s.toString().padStart(2, '0')}`;
   }
 
   function updatePlayButton(playing) {
     const btn = document.getElementById('arc-play-pause');
     if (playing) {
-      btn.innerHTML = `<svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="10" y1="4" x2="10" y2="20"></line><line x1="14" y1="4" x2="14" y2="20"></line></svg>`;
-      btn.style.background = '#e23d28'; // Red for pause/stop
+      btn.textContent = "PAUSE";
+      btn.style.background = "#ff5c5c"; // Red
+      btn.style.color = "#000";
     } else {
-      btn.innerHTML = `<svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="5 3 19 12 5 21 5 3"></polygon></svg>`;
-      btn.style.background = '#10a37f'; // Green for play
+      btn.textContent = "PLAY";
+      btn.style.background = "#00ff9d"; // Green
+      btn.style.color = "#000";
     }
   }
 
@@ -330,7 +380,6 @@
       pos3 = e.clientX;
       pos4 = e.clientY;
 
-      // Allow dragging anywhere with !important override
       elmnt.style.setProperty('top', (elmnt.offsetTop - pos2) + "px", 'important');
       elmnt.style.setProperty('left', (elmnt.offsetLeft - pos1) + "px", 'important');
       elmnt.style.setProperty('bottom', 'auto', 'important');
@@ -340,65 +389,6 @@
     function closeDragElement() {
       document.onmouseup = null;
       document.onmousemove = null;
-    }
-  }
-
-  // --- Audio & Visualizer Logic ---
-
-  function initAudioContext() {
-    try {
-      const AudioContext = window.AudioContext || window.webkitAudioContext;
-      STATE.audioCtx = new AudioContext();
-      STATE.analyser = STATE.audioCtx.createAnalyser();
-      STATE.analyser.fftSize = 64; // Smaller FFT for smoother, chunkier bars
-      const bufferLength = STATE.analyser.frequencyBinCount;
-      STATE.dataArray = new Uint8Array(bufferLength);
-    } catch (e) {
-      console.warn("ARC: Web Audio API not supported", e);
-    }
-  }
-
-  function drawVisualizer() {
-    if (!STATE.analyser) return;
-    const canvas = document.getElementById("arc-canvas");
-    if (!canvas) return;
-
-    const ctx = canvas.getContext("2d");
-    const WIDTH = canvas.width;
-    const HEIGHT = canvas.height;
-
-    STATE.animationId = requestAnimationFrame(drawVisualizer);
-    STATE.analyser.getByteFrequencyData(STATE.dataArray);
-
-    ctx.clearRect(0, 0, WIDTH, HEIGHT);
-
-    const barWidth = (WIDTH / STATE.dataArray.length) * 1.5;
-    let x = 0;
-
-    // Gradient for bars
-    const gradient = ctx.createLinearGradient(0, 0, WIDTH, 0);
-    gradient.addColorStop(0, '#10a37f');
-    gradient.addColorStop(1, '#0d8a6a');
-
-    for (let i = 0; i < STATE.dataArray.length; i++) {
-      const v = STATE.dataArray[i];
-      const barHeight = (v / 255) * HEIGHT * 0.8;
-
-      const r = 16 + (v / 2); // Dynamic color
-      const g = 163;
-      const b = 127 + (v / 2);
-
-      ctx.fillStyle = `rgba(${r}, ${g}, ${b}, 0.8)`;
-
-      // Center the bars vertically
-      const y = (HEIGHT - barHeight) / 2;
-
-      // Rounded caps
-      ctx.beginPath();
-      ctx.roundRect(x, y, barWidth - 2, barHeight, 4);
-      ctx.fill();
-
-      x += barWidth;
     }
   }
 
@@ -456,27 +446,33 @@
       if (STATE.currentAudio) {
         STATE.currentAudio.pause();
         STATE.currentAudio = null;
-        if (STATE.animationId) cancelAnimationFrame(STATE.animationId);
       }
+
+      STATE.lastConvId = conversationId;
+      STATE.lastMsgId = messageId;
 
       const audio = new Audio(audioUrl);
       audio.crossOrigin = "anonymous";
       audio.playbackRate = STATE.speed;
 
-      if (STATE.audioCtx) {
-        if (STATE.source) { STATE.source.disconnect(); }
-        STATE.source = STATE.audioCtx.createMediaElementSource(audio);
-        STATE.source.connect(STATE.analyser);
-        STATE.analyser.connect(STATE.audioCtx.destination);
-        drawVisualizer();
-      }
+      // Hook up timeupdate for progress bar
+      audio.addEventListener('timeupdate', () => {
+        if (!audio.duration) return;
+        const pct = (audio.currentTime / audio.duration) * 100;
+        const prog = document.getElementById('arc-progress');
+        const curr = document.getElementById('arc-time-current');
+        const tot = document.getElementById('arc-time-total');
+
+        if (prog) prog.value = pct;
+        if (curr) curr.textContent = formatTime(audio.currentTime);
+        if (tot) tot.textContent = formatTime(audio.duration);
+      });
 
       audio.onended = () => {
         STATE.currentAudio = null;
         STATE.isPlaying = false;
         updatePlayButton(false);
         URL.revokeObjectURL(audioUrl);
-        if (STATE.animationId) cancelAnimationFrame(STATE.animationId);
       };
 
       try {
