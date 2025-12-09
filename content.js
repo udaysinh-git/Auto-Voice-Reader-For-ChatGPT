@@ -104,15 +104,18 @@
         /* Header */
         #arc-header {
             display: flex;
-            justify-content: space-between;
+            justify-content: flex-end; /* Align items to right (minimal) */
             align-items: center;
             cursor: grab;
             user-select: none;
+            /* Remove border-bottom or keep? User said "remove branding". 
+               Let's keep the border for structure but minimal. */
             border-bottom: 3px solid var(--arc-border);
             padding-bottom: 8px;
             margin-bottom: 8px;
+            height: 32px; /* Ensure drag area exists even if empty on left */
         }
-        #arc-header h3 { margin: 0; font-size: 16px; font-weight: 700; text-transform: uppercase; letter-spacing: -1px;}
+        /* Removed h3 styling */
         
         .arc-icon-btn { background: none; border: none; color: var(--arc-txt); cursor: pointer; padding: 4px; display:flex; align-items:center; justify-content:center;}
         .arc-icon-btn:hover { transform: scale(1.1); }
@@ -201,7 +204,7 @@
         <!-- Main Expanded Panel -->
         <div id="arc-panel" class="visible">
             <div id="arc-header">
-                <h3>V-READER</h3>
+               <!-- Minimal Header: No Title -->
                 <div style="display:flex; gap:8px; align-items:center;">
                     <button id="arc-theme-toggle" class="arc-icon-btn" title="Toggle Theme">
                         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
@@ -221,7 +224,13 @@
                 </div>
 
                 <div id="arc-main-controls">
-                     <button id="arc-play-pause" class="arc-btn" title="Play/Pause">PLAY</button>
+                     <button id="arc-replay" class="arc-btn" title="Replay">
+                        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"></path><path d="M3 3v5h5"></path></svg>
+                     </button>
+                     <button id="arc-play-pause" class="arc-btn" style="flex:2;" title="Play/Pause">PLAY</button>
+                     <button id="arc-download" class="arc-btn" title="Download">
+                        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="7 10 12 15 17 10"></polyline><line x1="12" y1="15" x2="12" y2="3"></line></svg>
+                     </button>
                 </div>
             </div>
 
@@ -264,6 +273,8 @@
     const minimize = wrapper.querySelector('#arc-minimize');
     const themeToggle = wrapper.querySelector('#arc-theme-toggle');
     const playPause = wrapper.querySelector('#arc-play-pause');
+    const replayBtn = wrapper.querySelector('#arc-replay');
+    const downloadBtn = wrapper.querySelector('#arc-download');
     const voiceSel = wrapper.querySelector('#arc-voice-select');
     const speedSel = wrapper.querySelector('#arc-speed-select');
     const progressSlider = wrapper.querySelector('#arc-progress');
@@ -307,6 +318,29 @@
         updatePlayButton(STATE.isPlaying);
       } else {
         STATE.autoRead = !STATE.autoRead;
+      }
+    });
+
+    replayBtn.addEventListener('click', () => {
+      if (STATE.currentAudio) {
+        STATE.currentAudio.currentTime = 0;
+        STATE.currentAudio.play();
+        STATE.isPlaying = true;
+        updatePlayButton(true);
+      }
+    });
+
+    downloadBtn.addEventListener('click', () => {
+      if (STATE.currentAudio && STATE.currentAudio.src) {
+        const a = document.createElement('a');
+        a.href = STATE.currentAudio.src;
+        a.download = `voice-reader-${Date.now()}.mp3`;
+        // Attempt to name properly if possible, but minimal dependency
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+      } else {
+        alert("No audio loaded to download.");
       }
     });
 
