@@ -375,6 +375,8 @@
         updatePlayButton(STATE.isPlaying);
       } else {
         STATE.autoRead = !STATE.autoRead;
+        chrome.storage.local.set({ audioEnabled: STATE.autoRead });
+        console.log("ARC: Toggled autoRead to", STATE.autoRead);
       }
     });
 
@@ -594,6 +596,23 @@
 
   function init() {
     createUI();
+
+    // Load Auto-Read setting
+    chrome.storage.local.get(['audioEnabled'], (result) => {
+      if (result.audioEnabled !== undefined) {
+        STATE.autoRead = result.audioEnabled;
+        console.log("ARC: Loaded audioEnabled =", STATE.autoRead);
+      }
+    });
+
+    // Listen for changes
+    chrome.storage.onChanged.addListener((changes, namespace) => {
+      if (namespace === 'local' && changes.audioEnabled) {
+        STATE.autoRead = changes.audioEnabled.newValue;
+        console.log("ARC: Auto-read updated to", STATE.autoRead);
+      }
+    });
+
     setInterval(checkForNewMessages, 1000);
   }
 

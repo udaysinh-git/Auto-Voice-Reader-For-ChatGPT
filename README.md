@@ -11,7 +11,7 @@ This extension upgrades ChatGPT's voice capabilities by tapping directly into th
 - **🎛️ Advanced Control**:
   - **Speed**: Adjustable from **0.5x** to **3.0x**.
   - **Voice**: Switch voices instantly via the floating menu.
-- **🎙️ Floating Toggle**: A convenient "Jarvis" button on your screen to toggle auto-read on/off.
+- **🎙️ Extension Popup Toggle**: Click the extension icon in the toolbar to quickly enable/disable audio generation globally.
 - **🔄 Smart Retry**: Automatically handles API delays to ensure every message is read.
 
 ## 🛠️ Installation & Usage
@@ -20,11 +20,10 @@ This extension upgrades ChatGPT's voice capabilities by tapping directly into th
 2.  **Open [chatgpt.com](https://chatgpt.com)**.
 3.  **Wait for Load**: The extension quietly captures your session token from your first network request.
     *   *Note: If you see a "No Token" warning, simply refresh the page.*
-4.  **Look for the Icon**: You should see a **Microphone Icon (🎙️)** in the bottom right corner.
-5.  **Hover to Configure**:
-    *   Select your preferred **Voice**.
-    *   Adjust **Playback Speed**.
-6.  **Chat**: Send a message. The audio will start playing automatically!
+4.  **Control Audio**:
+    *   **Extension Popup**: Click the extension icon to toggle "Enable Audio Generation" on/off.
+    *   **On-Screen UI**: Use the floating widget to play/pause, change voices, and adjust speed.
+5.  **Chat**: Send a message. The audio will start playing automatically if enabled!
 
 ## 🔒 Privacy First
 
