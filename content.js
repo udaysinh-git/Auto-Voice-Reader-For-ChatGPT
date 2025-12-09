@@ -1,234 +1,234 @@
-// This extension does not collect, store, or transmit any personal data. All processing happens locally in your browser.
-// An accessibility-focused tool that automatically clicks the voice playback button on AI chat interfaces like ChatGPT. Ideal for visually impaired users who rely on screen readers or voice output.
-//Features:
-// - Automatically activates voice reading when a new message appears
-// - ON/OFF toggle for control
-// - Lightweight and respectful of user privacy
+// content.js
+// "Jarvis" Upgrade: Direct API Audio & Voice Control
 
-// /!\ This extension is NOT affiliated with OpenAI or ChatGPT.
 (function () {
   'use strict';
 
-  let autoReadActive = true;
-  let lastMessageCount = 0;
-  let isInitialized = false;
-  let pollingInterval = null;
-
-  const CONFIG =
-  {
-    POLLING_INTERVAL: 500,
-    CLICK_DELAY: 100,
-    INIT_DELAY: 500,
-    LOG_ACTIVE: false
+  // State
+  const STATE = {
+    autoRead: true,
+    voice: 'vale',
+    speed: 1.0,
+    currentAudio: null,
+    lastMessageCount: 0,
+    failedIds: new Set(),
+    processingId: null
   };
 
-  function logMessage(message) {
-    if (CONFIG.LOG_ACTIVE) {
-      console.log(message);
-    }
-  }
+  // Configuration
+  const API_ENDPOINT = "https://chatgpt.com/backend-api/synthesize";
+  const VOICES = ['ember', 'spruce', 'breeze', 'cove', 'arbor', 'juniper', 'maple', 'sol', 'vale'];
 
-  function clickLastReadButton() {
-    try {
-      // Strategy: Click "More actions" then "Read aloud"
-      const moreButtons = Array.from(document.querySelectorAll('button[aria-label="More actions"]'))
-        .filter(btn => btn.offsetParent !== null); // Only visible buttons
+  // --- UI ---
+  function createUI() {
+    if (document.getElementById('arc-container')) return;
 
-      if (moreButtons.length > 0 && autoReadActive) {
-        const lastMoreButton = moreButtons[moreButtons.length - 1];
-        logMessage('ARC clicking "More actions" button (visible index ' + (moreButtons.length - 1) + ')');
+    const container = document.createElement('div');
+    container.id = 'arc-container';
+    container.innerHTML = `
+        <div id="arc-controls" style="display:none;">
+            <select id="arc-voice-select">
+                ${VOICES.map(v => `<option value="${v}" ${v === STATE.voice ? 'selected' : ''}>${v}</option>`).join('')}
+            </select>
+            <input type="range" id="arc-speed" min="0.5" max="3.0" step="0.25" value="${STATE.speed}" title="Speed: ${STATE.speed}x">
+            <span id="arc-speed-val">${STATE.speed}x</span>
+        </div>
+        <button id="arc-fab" title="Toggle Auto-Read">🎙️</button>
+      `;
 
-        // Scroll into view to ensure clicks work
-        lastMoreButton.scrollIntoView({ behavior: 'smooth', block: 'center' });
-        lastMoreButton.focus();
+    const style = document.createElement('style');
+    style.textContent = `
+        #arc-container { position: fixed; bottom: 80px; right: 20px; z-index: 9999; display: flex; flex-direction: column; align-items: flex-end; gap: 10px; font-family: sans-serif; }
+        #arc-fab { width: 50px; height: 50px; border-radius: 50%; background: #10a37f; color: white; border: none; cursor: pointer; box-shadow: 0 4px 6px rgba(0,0,0,0.1); font-size: 24px; transition: transform 0.2s, background 0.2s; }
+        #arc-fab:hover { transform: scale(1.1); }
+        #arc-fab.off { background: #555; filter: grayscale(1); }
+        #arc-fab.playing { box-shadow: 0 0 15px #10a37f; animation: pulse 2s infinite; }
+        #arc-controls { background: #202123; padding: 10px; border-radius: 8px; box-shadow: 0 2px 10px rgba(0,0,0,0.2); display: flex; gap: 8px; align-items: center; border: 1px solid #444; }
+        #arc-voice-select { background: #343541; color: white; border: 1px solid #555; padding: 4px; border-radius: 4px; }
+        #arc-speed { width: 80px; }
+        #arc-speed-val { color: #ccc; font-size: 12px; width: 30px; }
+        @keyframes pulse { 0% { box-shadow: 0 0 0 0 rgba(16, 163, 127, 0.7); } 70% { box-shadow: 0 0 0 10px rgba(16, 163, 127, 0); } 100% { box-shadow: 0 0 0 0 rgba(16, 163, 127, 0); } }
+      `;
 
-        // Enhanced click sequence (Pointer + Mouse) for React compatibility
-        const opts = { view: window, bubbles: true, cancelable: true, buttons: 1 };
-        lastMoreButton.dispatchEvent(new PointerEvent('pointerdown', opts));
-        lastMoreButton.dispatchEvent(new MouseEvent('mousedown', opts));
-        lastMoreButton.dispatchEvent(new PointerEvent('pointerup', opts));
-        lastMoreButton.dispatchEvent(new MouseEvent('mouseup', opts));
-        lastMoreButton.dispatchEvent(new MouseEvent('click', opts));
+    document.head.appendChild(style);
+    document.body.appendChild(container);
 
-        setTimeout(() => {
-          // Search entire body for "Read aloud" since specific selectors might be failing
-          // Using TreeWalker to find text nodes is most robust
-          const walker = document.createTreeWalker(document.body, NodeFilter.SHOW_TEXT);
-          let node;
-          let found = false;
+    const fab = container.querySelector('#arc-fab');
+    const controls = container.querySelector('#arc-controls');
+    const voiceSel = container.querySelector('#arc-voice-select');
+    const speedInput = container.querySelector('#arc-speed');
+    const speedVal = container.querySelector('#arc-speed-val');
 
-          while (node = walker.nextNode()) {
-            if (node.nodeValue && node.nodeValue.includes('Read aloud')) {
-              // Found the text, click its parent or closest clickable ancestor
-              let target = node.parentElement;
-
-              // Walk up to find the actual menu item role or button
-              while (target && target !== document.body) {
-                if (target.getAttribute('role') === 'menuitem' || target.tagName === 'BUTTON' || target.className.includes('item')) {
-                  break;
-                }
-                target = target.parentElement;
-              }
-
-              if (target) {
-                logMessage('ARC clicking "Read aloud" element (via text search)');
-                target.click();
-                found = true;
-
-                // Close menu (dispatch Escape)
-                setTimeout(() => {
-                  const esc = new KeyboardEvent('keydown', {
-                    key: 'Escape', code: 'Escape', keyCode: 27, which: 27,
-                    bubbles: true, cancelable: true, view: window
-                  });
-                  document.dispatchEvent(esc);
-                }, 150);
-              } else {
-                logMessage('ARC Found "Read aloud" text but no clickable parent');
-                node.parentElement.click(); // Try clicking immediate parent as fallback
-                found = true;
-              }
-              break;
-            }
-          }
-
-          if (!found) {
-            logMessage('ARC "Read aloud" text NOT found in document body');
-          }
-        }, 800);
+    fab.addEventListener('click', () => {
+      STATE.autoRead = !STATE.autoRead;
+      fab.classList.toggle('off', !STATE.autoRead);
+      if (!STATE.autoRead && STATE.currentAudio) {
+        STATE.currentAudio.pause();
+        fab.classList.remove('playing');
+      } else if (STATE.autoRead) {
+        // Resume context if needed (fix for 'play not allowed')
+        const dummy = new Audio();
+        dummy.play().catch(() => { });
       }
-    } catch (error) {
-      console.warn('ARC Error while clicking the read button:', error);
-    }
-  }
-
-
-  function checkForNewResponses() {
-    try {
-      // Track "More actions" buttons as proxy for messages
-      const voiceButtons = document.querySelectorAll('button[aria-label="More actions"]');
-      const currentMessageCount = voiceButtons.length;
-
-      if (currentMessageCount < lastMessageCount) {
-        lastMessageCount = currentMessageCount;
-      }
-
-      if (currentMessageCount > lastMessageCount + 1) {
-        lastMessageCount = currentMessageCount;
-      }
-
-      if (currentMessageCount > lastMessageCount) {
-        logMessage(`ARC new response detected (${currentMessageCount} vs ${lastMessageCount})`);
-        lastMessageCount = currentMessageCount;
-
-        setTimeout(() => {
-          clickLastReadButton();
-        }, CONFIG.CLICK_DELAY);
-      }
-    }
-    catch (error) {
-      console.warn('ARC Error during response check:', error);
-    }
-  }
-
-  function showToast(message) {
-    const toast = document.createElement('div');
-    toast.textContent = message;
-    Object.assign(toast.style, {
-      position: 'fixed',
-      bottom: '20px',
-      right: '20px',
-      zIndex: '10001',
-      padding: '10px 20px',
-      backgroundColor: '#333',
-      color: '#fff',
-      borderRadius: '5px',
-      boxShadow: '0 2px 10px rgba(0,0,0,0.2)',
-      fontSize: '14px',
-      opacity: '0',
-      transition: 'opacity 0.3s ease'
     });
-    document.body.appendChild(toast);
 
-    // Animate in
-    setTimeout(() => toast.style.opacity = '1', 10);
-
-    // Animate out and remove
-    setTimeout(() => {
-      toast.style.opacity = '0';
-      setTimeout(() => toast.remove(), 300);
-    }, 2000);
+    container.addEventListener('mouseenter', () => controls.style.display = 'flex');
+    container.addEventListener('mouseleave', () => controls.style.display = 'none');
+    voiceSel.addEventListener('change', (e) => STATE.voice = e.target.value);
+    speedInput.addEventListener('input', (e) => {
+      STATE.speed = parseFloat(e.target.value);
+      speedVal.textContent = STATE.speed + 'x';
+      if (STATE.currentAudio) STATE.currentAudio.playbackRate = STATE.speed;
+    });
   }
 
-  // Listen for messages from background script
-  chrome.runtime.onMessage.addListener((request) => {
-    if (request.action === 'TOGGLE_AUTO_READ') {
-      autoReadActive = !autoReadActive;
-      const status = autoReadActive ? 'ON' : 'OFF';
-      logMessage(`ARC Auto-read toggled ${status}`);
-      showToast(`Auto Read: ${status}`);
-    }
-  });
+  // --- Core Logic ---
 
-  function startPolling() {
-    if (pollingInterval) {
-      clearInterval(pollingInterval);
-    }
-
-    pollingInterval = setInterval(checkForNewResponses, CONFIG.POLLING_INTERVAL);
-    logMessage(`ARC Polling started with ${CONFIG.POLLING_INTERVAL}ms interval`);
+  async function getStoredData() {
+    return chrome.storage.local.get([
+      "chatgpt_access_token",
+      "oai_client_version",
+      "oai_language",
+      "oai_device_id"
+    ]);
   }
 
-  function cleanup() {
-    if (pollingInterval) {
-      clearInterval(pollingInterval);
-      pollingInterval = null;
-    }
+  function getLatestInfo() {
+    const match = window.location.pathname.match(/\/c\/([a-z0-9-]+)/);
+    const conversationId = match ? match[1] : null; // May be null if new chat
+
+    const messages = document.querySelectorAll('[data-message-author-role="assistant"]');
+    if (!messages.length) return null;
+
+    const lastMessage = messages[messages.length - 1];
+    const idNode = lastMessage.closest('[data-message-id]');
+    const messageId = idNode ? idNode.getAttribute('data-message-id') : null;
+
+    return { conversationId, messageId, element: lastMessage };
   }
 
-  function initialize() {
-    if (isInitialized) {
-      logMessage('ARC Script already initialized, skipping');
-      return;
-    }
-
-    logMessage('ARC Initializing auto-read script');
+  async function playAudio(conversationId, messageId, attempt = 1) {
+    if (STATE.failedIds.has(messageId)) return;
 
     try {
-      cleanup();
+      const data = await getStoredData();
+      if (!data.chatgpt_access_token) {
+        console.warn("ARC: No token captured yet. Refresh the page.");
+        return;
+      }
 
+      if (!conversationId) {
+        // If we are on a new chat, we might miss the ID. 
+        // Rely on URL update? Or don't play initial 'new' chat messages?
+        // The API almost certainly needs a conversation ID.
+        // Try capturing it from the address bar if it updated recently?
+        const match = window.location.pathname.match(/\/c\/([a-z0-9-]+)/);
+        if (match) conversationId = match[1];
+        else {
+          console.log("ARC: No conversation ID found (New Chat?). Skipping.");
+          return;
+        }
+      }
+
+      const url = `${API_ENDPOINT}?message_id=${messageId}&conversation_id=${conversationId}&voice=${STATE.voice}`;
+
+      const headers = {
+        'Authorization': data.chatgpt_access_token
+      };
+
+      if (data.oai_client_version) headers['OAI-Client-Version'] = data.oai_client_version;
+      if (data.oai_language) headers['OAI-Language'] = data.oai_language;
+      if (data.oai_device_id) headers['OAI-Device-Id'] = data.oai_device_id; // Prefer captured over cookie
+
+      console.log(`ARC: Fetching audio (Try ${attempt}) for ${messageId}`);
+
+      const response = await fetch(url, { headers });
+
+      if (!response.ok) {
+        if (response.status === 404 && attempt < 3) {
+          // Retry logic for "Message not found" (Consistency delay)
+          console.log(`ARC: 404, retrying in 2.5s...`);
+          setTimeout(() => playAudio(conversationId, messageId, attempt + 1), 2500);
+          return;
+        }
+        if (response.status === 404) STATE.failedIds.add(messageId);
+        throw new Error(`API Error ${response.status}`);
+      }
+
+      const blob = await response.blob();
+      const audioUrl = URL.createObjectURL(blob);
+
+      if (STATE.currentAudio) {
+        STATE.currentAudio.pause();
+        STATE.currentAudio = null;
+      }
+
+      const audio = new Audio(audioUrl);
+      audio.playbackRate = STATE.speed;
+
+      const fab = document.querySelector('#arc-fab');
+      if (fab) fab.classList.add('playing');
+
+      audio.onended = () => {
+        STATE.currentAudio = null;
+        if (fab) fab.classList.remove('playing');
+        URL.revokeObjectURL(audioUrl);
+      };
+
+      audio.onerror = (e) => {
+        console.error("ARC: Audio playback error", e);
+        if (fab) fab.classList.remove('playing');
+      };
+
+      // Play handling
+      try {
+        await audio.play();
+        STATE.currentAudio = audio;
+      } catch (err) {
+        console.warn("ARC: Autoplay blocked. User interaction needed.", err);
+        if (fab) fab.classList.remove('playing');
+      }
+
+    } catch (e) {
+      console.error("ARC: Fetch fail", e);
+    }
+  }
+
+  // --- Polling ---
+
+  function checkForNewMessages() {
+    if (!STATE.autoRead) return;
+
+    const info = getLatestInfo();
+    if (!info || !info.messageId) return;
+
+    // Skip placeholders
+    if (info.messageId.includes('placeholder')) return;
+
+    // Skip streaming
+    const isStreaming = info.element.classList.contains('result-streaming');
+    if (isStreaming) return;
+
+    // New Message Check
+    if (info.messageId !== STATE.processingId && !STATE.failedIds.has(info.messageId)) {
+      STATE.processingId = info.messageId;
+
+      // Initial delay increased to 1.5s to allow backend propagation
       setTimeout(() => {
-        startPolling();
-
-        const voiceButtons = document.querySelectorAll('button[aria-label="More actions"]');
-        lastMessageCount = voiceButtons.length;
-        logMessage(`ARC Initial messages detected: ${lastMessageCount}`);
-
-        isInitialized = true;
-      }, CONFIG.INIT_DELAY);
-
-    } catch (error) {
-      console.error('ARC Initialization error:', error);
+        playAudio(info.conversationId, info.messageId);
+      }, 1500);
     }
   }
 
-  function waitForDOMAndInitialize() {
-    if (document.readyState === 'loading') {
-      document.addEventListener('DOMContentLoaded', initialize, { once: true });
-    }
-    else {
-      setTimeout(initialize, 1000);
-    }
+  function init() {
+    createUI();
+    setInterval(checkForNewMessages, 1000);
   }
 
-  window.addEventListener('beforeunload', cleanup);
-
-  window.addEventListener('error', function (e) {
-    if (e.message && e.message.includes('ARC')) {
-      console.warn('ARC Error intercepted:', e.message);
-    }
-  });
-
-  waitForDOMAndInitialize();
+  if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', init);
+  } else {
+    init();
+  }
 
 })();

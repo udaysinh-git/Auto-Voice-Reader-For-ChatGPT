@@ -1,58 +1,42 @@
-This extension is not affiliated with OpenAI or ChatGPT.
+# Auto Voice Reader for ChatGPT (Jarvis Upgrade)
 
-# Auto Voice Reader For ChatGPT
+> **Turn ChatGPT into a dedicated voice assistant with direct audio integration.**
 
-**Auto Voice Reader** is a lightweight and privacy-friendly browser extension designed to improve accessibility for visually impaired users.
+This extension upgrades ChatGPT's voice capabilities by tapping directly into the internal `synthesize` API. Instead of relying on the slow "Read Aloud" button, it fetches high-quality audio directly from OpenAI's servers, offering you instant playback, custom speed control, and a choice of premium voices.
 
-It automatically clicks the "Read Aloud" button whenever a new ChatGPT response appears, allowing screen readers or voice tools to read content out loud without extra user interaction.
+## 🚀 Features
 
----
+- **⚡ Direct API Audio**: Bypasses the UI to fetch audio directly. Faster and more reliable.
+- **🗣️ Premium Voices**: Access all internal voices, including **Ember, Spruce, Breeze, Cove, Arbor, Juniper, Maple, Sol, and Vale**.
+- **🎛️ Advanced Control**:
+  - **Speed**: Adjustable from **0.5x** to **3.0x**.
+  - **Voice**: Switch voices instantly via the floating menu.
+- **🎙️ Floating Toggle**: A convenient "Jarvis" button on your screen to toggle auto-read on/off.
+- **🔄 Smart Retry**: Automatically handles API delays to ensure every message is read.
 
-## 🧩 Features
+## 🛠️ Installation & Usage
 
-- 🔊 **Auto Playback**: Automatically clicks "Read Aloud" on new messages.
-- 👆 **Click Automation**: Intelligently handles the "More" (...) menu to find the hidden "Read Aloud" button.
-- ⏯️ **Toggle Control**: Click the **Extension Icon** in your toolbar to toggle ON/OFF.
-- 🍞 **Visual Feedback**: Shows a "Toast" notification when status changes.
-- 🔒 **Privacy First**: No data collection, no external API, works entirely locally.
+1.  **Install the Extension**.
+2.  **Open [chatgpt.com](https://chatgpt.com)**.
+3.  **Wait for Load**: The extension quietly captures your session token from your first network request.
+    *   *Note: If you see a "No Token" warning, simply refresh the page.*
+4.  **Look for the Icon**: You should see a **Microphone Icon (🎙️)** in the bottom right corner.
+5.  **Hover to Configure**:
+    *   Select your preferred **Voice**.
+    *   Adjust **Playback Speed**.
+6.  **Chat**: Send a message. The audio will start playing automatically!
 
----
+## 🔒 Privacy First
 
-## 👀 Who is it for?
+*   **Local Processing**: All logic runs right in your browser.
+*   **Token Security**: Your access token is stored locally in `chrome.storage.local` and used **only** to fetch audio from `chatgpt.com`. It is **never** sent to any third-party server.
+*   **No External APIs**: The extension only talks to OpenAI's official endpoints.
 
-- People with **visual impairments**
-- Users who prefer **hands-free voice feedback**
-- Educators or students using ChatGPT with **audio-based workflows**
+## 🐞 Troubleshooting
 
----
-
-## 🛠️ How to Install
-
-### 🔥 Firefox (Optimized)
-1.  **Download** or Clone this repository.
-2.  Open Firefox and go to `about:debugging#/runtime/this-firefox`.
-3.  Click **"Load Temporary Add-on..."**.
-4.  Select `manifest.json`.
-5.  Visit [chatgpt.com](https://chatgpt.com).
-
-### 🟢 Chrome / Edge / Brave
-1.  **Download** or Clone this repository.
-2.  **Rename File**: Rename `manifest_chrome.json` to `manifest.json` (overwrite the existing one).
-    *   *Note: Chrome requires a slightly different configuration than Firefox.*
-3.  Open Chrome and go to `chrome://extensions`.
-4.  Enable **"Developer mode"**.
-5.  Click **"Load unpacked"** and select the folder.
+*   **Audio doesn't play?**: Check if the floating icon is **Green** (Active). If it's Grey, click to enable.
+*   **"Message not found"?**: The extension has built-in retry logic. Wait 2-3 seconds; audio generation sometimes lags behind text.
+*   **Voices missing?**: Reload the extension to update the voice list.
 
 ---
-
-## ✅ Permissions
-
-- **Active Tab**: To toggle functionalities via the icon.
-- **Scripting/Content**: Only runs on `https://chatgpt.com/*`.
-- **No data collection**: All processing is local.
-
----
-
-## 🙌 Contributions
-
-Feel free to open issues or pull requests for improvements, localization, or compatibility with other platforms.
+*Disclaimer: This is an unofficial extension and is not affiliated with OpenAI.*

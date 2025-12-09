@@ -8,7 +8,13 @@
   "name": "ChatGPT Auto Voice Reader",
   "version": "1.0",
   "description": "Automatically click the read outload button on ChatGPT.",
-  "permissions": [],
+  "permissions": [
+    "webRequest",
+    "storage"
+  ],
+  "host_permissions": [
+    "https://chatgpt.com/*"
+  ],
   "content_scripts": [
     {
       "matches": [
