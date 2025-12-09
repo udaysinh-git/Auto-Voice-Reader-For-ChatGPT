@@ -20,7 +20,7 @@
   };
 
   const API_ENDPOINT = "https://chatgpt.com/backend-api/synthesize";
-  const VOICES = ['ember', 'spruce', 'breeze', 'cove', 'arbor', 'juniper', 'maple', 'sol', 'vale'];
+  const VOICES = ['breeze', 'cove', 'arbor', 'juniper', 'maple', 'sol', 'vale'];
   const SPEEDS = [0.25, 0.5, 0.75, 1.0, 1.25, 1.5, 1.75, 2.0];
 
   // --- HTML & CSS ---
@@ -264,7 +264,64 @@
     document.body.appendChild(wrapper);
 
     bindEvents(wrapper);
+    bindKeys();
     dragElement(wrapper);
+  }
+
+  function bindKeys() {
+    document.addEventListener('keydown', (e) => {
+      // Ignore if typing in an input/textarea
+      if (['INPUT', 'TEXTAREA'].includes(e.target.tagName) || e.target.isContentEditable) return;
+
+      switch (e.key) {
+        case ' ': // Toggle Play/Pause
+          e.preventDefault();
+          const playBtn = document.getElementById('arc-play-pause');
+          if (playBtn) playBtn.click();
+          break;
+        case 'ArrowLeft': // Seek -5s
+          if (STATE.currentAudio) {
+            STATE.currentAudio.currentTime = Math.max(0, STATE.currentAudio.currentTime - 5);
+          }
+          break;
+        case 'ArrowRight': // Seek +5s
+          if (STATE.currentAudio) {
+            STATE.currentAudio.currentTime = Math.min(STATE.currentAudio.duration, STATE.currentAudio.currentTime + 5);
+          }
+          break;
+        case '[': // Speed Down
+          updateSpeed(-0.25);
+          break;
+        case ']': // Speed Up
+          updateSpeed(0.25);
+          break;
+        case 'Escape': // Toggle minimize/expand
+          const fab = document.getElementById('arc-fab');
+          if (STATE.isExpanded) {
+            const minBtn = document.getElementById('arc-minimize');
+            if (minBtn) minBtn.click();
+          } else if (fab) {
+            fab.click();
+          }
+          break;
+      }
+    });
+  }
+
+  function updateSpeed(change) {
+    const sel = document.getElementById('arc-speed-select');
+    if (!sel) return;
+
+    let current = parseFloat(sel.value);
+    let newVal = current + change;
+
+    // Clamp between 0.25 and 2.0
+    if (newVal < 0.25) newVal = 0.25;
+    if (newVal > 2.0) newVal = 2.0;
+
+    // Select the nearest option to ensure validity (though logic above matches options)
+    sel.value = newVal;
+    sel.dispatchEvent(new Event('change'));
   }
 
   function bindEvents(wrapper) {
